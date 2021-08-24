@@ -60,7 +60,7 @@ func LogsHandler(ctx *ofctx.OpenFunctionContext, in []byte) int {
 		}
 		notify.Alerts = append(notify.Alerts, alt)
 		notifyBytes, _ := json.Marshal(notify)
-		if err := ctx.SendTo(notifyBytes, "alert"); err != nil {
+		if err := ctx.SendTo(notifyBytes, "notification-manager"); err != nil {
 			panic(err)
 		}
 		log.Printf("Send log to notification manager.")
