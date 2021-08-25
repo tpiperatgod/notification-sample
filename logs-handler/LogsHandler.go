@@ -14,7 +14,7 @@ import (
 const (
 	HTTPCodeNotFound = "404"
 	Namespace        = "demo-project"
-	PodName          = "wordpress-v1-f54f697c5-hdn2z"
+	PodName          = "wordpress-v1-[A-Za-z0-9]{9}-[A-Za-z0-9]{5}"
 	AlertName        = "404 Request"
 	Severity         = "warning"
 )
@@ -23,15 +23,18 @@ func LogsHandler(ctx *ofctx.OpenFunctionContext, in []byte) int {
 	content := string(in)
 	matchHTTPCode, _ := regexp.MatchString(fmt.Sprintf(" %s ", HTTPCodeNotFound), content)
 	matchNamespace, _ := regexp.MatchString(fmt.Sprintf("namespace_name\":\"%s", Namespace), content)
-	matchPodName, _ := regexp.MatchString(fmt.Sprintf("pod_name\":\"%s", PodName), content)
+	matchPodName := regexp.MustCompile(fmt.Sprintf(`(%s)`, PodName)).FindStringSubmatch(content)
 
-	if matchHTTPCode && matchNamespace && matchPodName {
+	if matchHTTPCode && matchNamespace && matchPodName != nil {
 		log.Printf("Match log - Content: %s", content)
 
-		re := regexp.MustCompile(`([A-Z]+) (/\S*) HTTP`)
-		match := re.FindAllStringSubmatch(content, -1)[0]
+		match := regexp.MustCompile(`([A-Z]+) (/\S*) HTTP`).FindStringSubmatch(content)
+		if match == nil {
+			return 500
+		}
 		path := match[len(match)-1]
 		method := match[len(match)-2]
+		podName := matchPodName[len(matchPodName)-1]
 
 		notify := &alert.Data{
 			Receiver:          "notification_manager",
@@ -48,7 +51,7 @@ func LogsHandler(ctx *ofctx.OpenFunctionContext, in []byte) int {
 				"alertname": AlertName,
 				"namespace": Namespace,
 				"severity":  Severity,
-				"pod":       PodName,
+				"pod":       podName,
 				"path":      path,
 				"method":    method,
 			},
@@ -60,6 +63,7 @@ func LogsHandler(ctx *ofctx.OpenFunctionContext, in []byte) int {
 		}
 		notify.Alerts = append(notify.Alerts, alt)
 		notifyBytes, _ := json.Marshal(notify)
+
 		if err := ctx.SendTo(notifyBytes, "notification-manager"); err != nil {
 			panic(err)
 		}
